@@ -1,0 +1,27 @@
+version = 0.1
+
+[default]
+[default.validate.parameters]
+template_file = "dynamodb.yml"
+lint = true
+
+[default.build.parameters]
+stack_name = "myDynamoDB"
+template_file = "dynamodb.yml"
+
+[default.deploy.parameters]
+stack_name = "myDynamoDB"
+resolve_s3 = true
+s3_prefix = "dynamoDB"
+region = "eu-central-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[default.sync.parameters]
+stack_name = "myDynamoDB"
+template_file = "dynamodb.yml"
+watch = true
+
+[default.delete.parameters]
+stack_name = "myDynamoDB"
