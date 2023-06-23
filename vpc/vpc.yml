@@ -1,13 +1,13 @@
 Metadata:
  # Control the UI display when running this template from the AWS Management Console:
- AWS::CloudFormation::Interface:
-   ParameterGroups:
-     - Label:
-         default: "Network Configuration"
-       Parameters:
-         - NumberOfAZs
-         - PrivateSubnets
-         - NATType
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: "Network Configuration"
+        Parameters:
+        - NumberOfAZs
+        - PrivateSubnets
+        - NATType
 
 Parameters:
   NumberOfAZs:
