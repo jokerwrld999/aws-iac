@@ -1,3 +1,17 @@
+Parameters:
+  NumberOfAZs:
+    Type: Number
+    AllowedValues:
+    - 1
+    - 2
+    - 3
+    Default: 2
+    Description: How many Availability Zones do you wish to utilize?
+
+Conditions:
+  BuildPublic2:       !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
+  BuildPublic3:       !Equals [ !Ref NumberOfAZs, 3 ]
+
 Resources:
   # >>> Creating VPC
   VPC:
