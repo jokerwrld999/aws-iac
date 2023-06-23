@@ -8,6 +8,7 @@ Parameters:
     Default: 2
     Description: How many Availability Zones do you wish to utilize?
 
+
 Conditions:
   BuildPublic2:       !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
   BuildPublic3:       !Equals [ !Ref NumberOfAZs, 3 ]
@@ -46,6 +47,7 @@ Resources:
         Value: !Sub ${AWS::StackName}-Public-1
   PublicSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: BuildPublic2
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.10.2.0/24
@@ -53,6 +55,16 @@ Resources:
       Tags:
       - Key: Name
         Value: !Sub ${AWS::StackName}-Public-2
+  PublicSubnet3:
+    Type: AWS::EC3::Subnet
+    Condition: BuildPublic3
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.3.0/24
+      AvailabilityZone: !Select [ 1, !GetAZs ]
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Public-3
   
   # >>> Private Subnets
   PrivateSubnet1:
@@ -127,8 +139,15 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: BuildPubclic2
     Properties:
       SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: BuildPubclic3
+    Properties:
+      SubnetId: !Ref PublicSubnet3
       RouteTableId: !Ref PublicRouteTable
   PrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
