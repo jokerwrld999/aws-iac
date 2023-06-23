@@ -1,3 +1,14 @@
+Metadata:
+ # Control the UI display when running this template from the AWS Management Console:
+ AWS::CloudFormation::Interface:
+   ParameterGroups:
+     - Label:
+         default: "Network Configuration"
+       Parameters:
+         - NumberOfAZs
+         - PrivateSubnets
+         - NATType
+
 Parameters:
   NumberOfAZs:
     Type: Number
@@ -14,14 +25,47 @@ Parameters:
     - False
     Default: True
     Description: Do you want to create private subnets in addition to public subnets?
+  NATType:
+    Type: String
+    AllowedValues:
+    - "EC2 NAT Instance"
+    - "NAT Gateway"
+    Default: "EC2 NAT Instance"
+    Description: Waht type of NAT to use for private instances to communicate with the internet. A single EC2 instance can be used as a NAT, or you can use the AWS NAT Gateway (managed, scalable, more expensive).  This setting will be IGNORED if you do not build private subnets.
+  
+Mappings:
+ #  This is the Amazon Linux 2 AMI.  Adjust these values as needed, they can change a few times per year:
+ AmazonLinuxAMI:
+   us-east-1:
+     AMI: ami-04681a1dbd79675a5    # N Virginia
+   us-east-2:
+     AMI: ami-0cf31d971a3ca20d6    # Ohio     
+   us-west-1:
+     AMI: ami-0782017a917e973e7    # N California
+   us-west-2:
+     AMI: ami-6cd6f714             # Oregon
+   eu-west-1:
+     AMI: ami-0bdb1d6c15a40392c    # Ireland
+   eu-central-1:
+     AMI: ami-0f5dbc86dd9cbf7a8    # Frankfurt
+   sa-east-1:
+     AMI: ami-0ad7b0031d41ed4b9    # Sao Paulo
+   ap-southeast-1:
+     AMI: ami-01da99628f381e50a    # Singapore
+   ap-southeast-2:
+     AMI: ami-00e17d1165b9dd3ec    # Sydney
+   ap-northeast-1:
+     AMI: ami-08847abae18baa040    # Tokyo
 
 Conditions:
-  BuildPublic2:       !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
-  BuildPublic3:       !Equals [ !Ref NumberOfAZs, 3 ]
+  BuildPublic2:        !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
+  BuildPublic3:        !Equals [ !Ref NumberOfAZs, 3 ]
   BuildPrivateSubnets: !Equals [ !Ref PrivateSubnets, True]
-  BuildildPrivate1: !Equals [ !Ref PrivateSubnets, True]
-  BuildildPrivate2: !And [ !Not [ !Equals [ !Ref NumberOfAZs,1 ]], !Equals [ !Ref PrivateSubnets, True ]]
-  BuildildPrivate3: !And [[ !Equals [ !Ref NumberOfAZs, 3 ]], !Equals [ !Ref PrivateSubnets, True ]]
+  BuildildPrivate1:    !Equals [ !Ref PrivateSubnets, True]
+  BuildildPrivate2:    !And [ !Not [ !Equals [ !Ref NumberOfAZs,1 ]], !Equals [ !Ref PrivateSubnets, True ]]
+  BuildildPrivate3:    !And [[ !Equals [ !Ref NumberOfAZs, 3 ]], !Equals [ !Ref PrivateSubnets, True ]]
+  BuildNATGateway:     !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "NAT Gateway" ]]
+  BuildNATInstance:    !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "EC2 NAT Instance" ]]
 
 Resources:
   # >>> Creating VPC
@@ -133,29 +177,94 @@ Resources:
       Tags:
       - Key: Name
         Value: Private
-#  PrivateRoute1:
-#    Type: AWS::EC2::Route
-#     Condition: BuildPrivateSubnets
-#    Properties:
-#      RouteTableId: !Ref PrivateRouteTable
-#      DestinationCidrBlock: !GetAtt VPC.CidrBlock
-#      NatGatewayId: !Ref NatGateway
+  PrivateRoute1:            # Private route table can access web via NAT (created below)
+   Type: AWS::EC2::Route
+   Condition: BuildPrivateSubnets
+   Properties:
+     RouteTableId: !Ref PrivateRouteTable
+     DestinationCidrBlock: 0.0.0.0/0
+     # If we are using a NAT Instance, route traffic through the NAT Instance:
+     InstanceId:   !If [ BuildNATInstance, !Ref NATInstance, !Ref "AWS::NoValue" ]
+     # Otherwise if we are using a NAT Gateway, route traffic through the NAT Gateway:
+     NatGatewayId: !If [ BuildNATGateway, !Ref NATGateway, !Ref "AWS::NoValue" ]
   
   # >>> A NAT Gateway:
-#  NatGateway:
-#    Type: AWS::EC2::NatGateway
-#    Condition: BuildPrivateSubnets
-#    Properties:
-#      AllocationId: !GetAtt ElasticIPAddress.AllocationId
-#      SubnetId: !Ref PublicSubnet2
-#      Tags:
-#      - Key: Name
-#        Value: !Sub NAT-${AWS::StackName}
-#  ElasticIPAddress:
-#    Type: AWS::EC2::EIP
-#    Condition: BuildPrivateSubnets
-#    Properties:
-#      Domain: VPC
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Condition: BuildNATGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIPAddress.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub NAT-${AWS::StackName}
+  ElasticIPAddress:
+    Type: AWS::EC2::EIP
+    Condition: BuildNATGateway
+    Properties:
+      Domain: VPC
+
+  # A security group for our NAT.  Ingress from the VPC IPs only.  Egress is TCP & UDP only:
+  NATSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: BuildNATInstance
+    DependsOn: AttachGateway
+    Properties:
+      GroupName: !Sub NATSecurityGroup-${AWS::StackName}
+      GroupDescription: Enable internal access to the NAT device
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '0'
+        ToPort: '1024'
+        CidrIp: !GetAtt VPC.CidrBlock
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: '0'
+        ToPort: '65535'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: udp
+        FromPort: '0'
+        ToPort: '65535'
+        CidrIp: 0.0.0.0/0
+
+# A NAT Instance will be used if the user selected Private subnets and EC2-based NAT.     
+  NATInstance:
+    Type: AWS::EC2::Instance
+    Condition: BuildNATInstance
+    DependsOn: PublicRoute1                           # Must have route to IGW established.
+    Properties:
+      ImageId: !FindInMap [ AmazonLinuxAMI, !Ref "AWS::Region", AMI ]  # lookup from AMI map
+      InstanceType: t2.micro                          # Any instance type is fine
+      NetworkInterfaces:
+      - DeviceIndex: '0'
+        SubnetId: !Ref PublicSubnet1                  # Any public subnet is fine
+        AssociatePublicIpAddress: true                # We will need a public IP address
+        GroupSet: [ !Ref NATSecurityGroup ]             # Plug in the security group
+      SourceDestCheck: false  # NATs don't work if EC2 matches source with destinations.
+      Tags:
+      - Key: Name
+        Value: !Sub NAT-${AWS::StackName}
+      UserData:      #  This code is NAT code.  Last line signals completion:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum -y update
+          yum install -y aws-cfn-bootstrap
+          echo 1 > /proc/sys/net/ipv4/ip_forward
+          echo 0 > /proc/sys/net/ipv4/conf/eth0/send_redirects
+          /sbin/iptables -t nat -A POSTROUTING -o eth0 -s 0.0.0.0/0 -j MASQUERADE
+          /sbin/iptables-save > /etc/sysconfig/iptables
+          mkdir -p /etc/sysctl.d/
+          cat << NatConfFileMarker > /etc/sysctl.d/nat.conf
+          net.ipv4.ip_forward = 1
+          net.ipv4.conf.eth0.send_redirects = 0
+          NatConfFileMarker
+          /opt/aws/bin/cfn-signal -e 0 --resource NATInstance --stack ${AWS::StackName} --region ${AWS::Region}
+    # This NATInstance is only complete when you get 1 signal back within 5 minutes'.
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT5M
 
   # >>> Attach Public Subnets To Public Route Tables
   PublicSubnet1RouteTableAssociation:
