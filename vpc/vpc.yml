@@ -58,14 +58,14 @@ Mappings:
      AMI: ami-08847abae18baa040    # Tokyo
 
 Conditions:
-  BuildPublic2:        !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
-  BuildPublic3:        !Equals [ !Ref NumberOfAZs, 3 ]
+  BuildPublic2: !Not [ !Equals [ !Ref NumberOfAZs, 1 ]]
+  BuildPublic3: !Equals [ !Ref NumberOfAZs, 3 ]
   BuildPrivateSubnets: !Equals [ !Ref PrivateSubnets, True]
-  BuildildPrivate1:    !Equals [ !Ref PrivateSubnets, True]
-  BuildildPrivate2:    !And [ !Not [ !Equals [ !Ref NumberOfAZs,1 ]], !Equals [ !Ref PrivateSubnets, True ]]
-  BuildildPrivate3:    !And [[ !Equals [ !Ref NumberOfAZs, 3 ]], !Equals [ !Ref PrivateSubnets, True ]]
-  BuildNATGateway:     !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "NAT Gateway" ]]
-  BuildNATInstance:    !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "EC2 NAT Instance" ]]
+  BuildPrivate1: !Equals [ !Ref PrivateSubnets, True]
+  BuildPrivate2: !And [ !Not [ !Equals [ !Ref NumberOfAZs, 1 ]], !Equals [ !Ref PrivateSubnets, True ]]
+  BuildPrivate3: !And [ !Equals [ !Ref NumberOfAZs, 3 ], !Equals [ !Ref PrivateSubnets, True ]]
+  BuildNATGateway: !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "NAT Gateway" ]]
+  BuildNATInstance: !And [ !Equals [ !Ref PrivateSubnets, True ], !Equals [ !Ref NATType, "EC2 NAT Instance" ]]
 
 Resources:
   # >>> Creating VPC
@@ -189,12 +189,12 @@ Resources:
      NatGatewayId: !If [ BuildNATGateway, !Ref NATGateway, !Ref "AWS::NoValue" ]
   
   # >>> A NAT Gateway:
-  NatGateway:
+  NATGateway:
     Type: AWS::EC2::NatGateway
     Condition: BuildNATGateway
     Properties:
       AllocationId: !GetAtt ElasticIPAddress.AllocationId
-      SubnetId: !Ref PublicSubnet2
+      SubnetId: !Ref PublicSubnet1
       Tags:
       - Key: Name
         Value: !Sub NAT-${AWS::StackName}
@@ -202,7 +202,7 @@ Resources:
     Type: AWS::EC2::EIP
     Condition: BuildNATGateway
     Properties:
-      Domain: VPC
+      Domain: vpc
 
   # A security group for our NAT.  Ingress from the VPC IPs only.  Egress is TCP & UDP only:
   NATSecurityGroup:
@@ -274,13 +274,13 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
   PublicSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: BuildPubclic2
+    Condition: BuildPublic2
     Properties:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable
   PublicSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: BuildPubclic3
+    Condition: BuildPublic3
     Properties:
       SubnetId: !Ref PublicSubnet3
       RouteTableId: !Ref PublicRouteTable
@@ -323,7 +323,7 @@ Outputs:
      Name: !Sub ${AWS::StackName}-PublicSubnet2
  PublicSubnet3:
    Description: Third Public Subnet
-   Condition: BuildPublicC
+   Condition: BuildPublic3
    Value: !Ref PublicSubnet3
    Export:
      Name: !Sub ${AWS::StackName}-PublicSubnet3
